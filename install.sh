@@ -50,12 +50,11 @@ wait_for_apt() {
 # ===================== Input Validation =====================
 validate_domain() {
     local domain=$1
-    if [[ ! "$domain" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+$ ]]; then
+    if [[ ! "$domain" =~ ^[a-zA-Z0-9][-a-zA-Z0-9.]*\.[a-zA-Z]{2,}$ ]]; then
         return 1
     fi
     return 0
 }
-
 validate_bot_token() {
     local token=$1
     if [[ ! "$token" =~ ^[0-9]+:[A-Za-z0-9_-]{35,}$ ]]; then
