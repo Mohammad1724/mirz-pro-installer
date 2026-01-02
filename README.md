@@ -1,5 +1,3 @@
-Markdown
-
 # Mirza Pro Installer
 
 اسکریپت نصب آسان پنل ربات تلگرام Mirza Pro
