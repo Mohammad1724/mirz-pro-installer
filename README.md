@@ -8,7 +8,7 @@
 ## 🚀 نصب
 
 ```bash
-bash <(curl -s https://raw.githubusercontent.com/Mohammad1724/mirz-pro-installer/main/install.sh)
+bash <(curl -s https://raw.githubusercontent.com/Mohammad1724/mirz-pro-installer/main/install.sh)```
 
 
 ✨ امکانات
