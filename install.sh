@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================
-# Mirza Pro Manager - Version 3.1.0
+# Mirza Pro Manager - Version 3.2.0
 # =============================================
 
 # ===================== Global Variables =====================
@@ -34,7 +34,7 @@ mirza_logo() {
 ██║╚██╔╝██║██║██╔══██╗ ███╔╝  ██╔══██║    ██╔═══╝ ██╔══██╗██║   ██║
 ██║ ╚═╝ ██║██║██║  ██║███████╗██║  ██║    ██║     ██║  ██║╚██████╔╝
 ╚═╝     ╚═╝╚═╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝    ╚═╝     ╚═╝  ╚═╝ ╚═════╝
-                    Version 3.1.0 - Full Edition
+                    Version 3.2.0 - Ultimate Edition
 EOF
     echo -e "${NC}"
 }
@@ -50,7 +50,6 @@ wait_for_apt() {
 # ===================== Input Validation =====================
 validate_domain() {
     local domain=$1
-    # Improved regex to allow numbers in domain (e.g., iranshop21)
     if [[ ! "$domain" =~ ^[a-zA-Z0-9][-a-zA-Z0-9.]*\.[a-zA-Z]{2,}$ ]]; then
         return 1
     fi
@@ -73,14 +72,6 @@ validate_admin_id() {
     return 0
 }
 
-validate_username() {
-    local username=$1
-    if [[ ! "$username" =~ ^[a-zA-Z][a-zA-Z0-9_]{4,31}$ ]]; then
-        return 1
-    fi
-    return 0
-}
-
 # ===================== DNS Check =====================
 check_dns() {
     local domain=$1
@@ -88,7 +79,7 @@ check_dns() {
     local domain_ip=$(dig +short "$domain" | head -n1)
     
     if [[ "$server_ip" == "$domain_ip" ]]; then
-        echo -e "${GREEN}DNS is correctly pointed to this server${NC}"
+        echo -e "${GREEN}DNS is correctly pointed to this server ✅${NC}"
         return 0
     else
         echo -e "${RED}DNS mismatch!${NC}"
@@ -128,17 +119,12 @@ fix_mirza_errors() {
     fi
 
     if [ -f table.php ]; then
-        if sudo -u www-data php table.php >/dev/null 2>&1; then
-            echo -e "${GREEN}Tables created successfully${NC}"
-        else
-            echo -e "${YELLOW}Tables likely already exist${NC}"
-        fi
+        sudo -u www-data php table.php >/dev/null 2>&1
         rm -f table.php
     fi
 
     chown -R www-data:www-data "$MIRZA_PATH" 2>/dev/null
     chmod -R 755 "$MIRZA_PATH" 2>/dev/null
-    
     log_message "fix_mirza_errors completed"
 }
 
@@ -149,7 +135,6 @@ install_mirza() {
     log_message "Starting installation"
     
     wait_for_apt
-
     [[ ! $(command -v openssl) ]] && apt-get install -y openssl
     [[ ! $(command -v dig) ]] && apt-get install -y dnsutils
     
@@ -162,10 +147,9 @@ install_mirza() {
 
     while true; do
         read -p "Domain (e.g., bot.example.com): " DOMAIN
-        if validate_domain "$DOMAIN"; then break; else echo -e "${RED}Invalid domain format!${NC}"; fi
+        if validate_domain "$DOMAIN"; then break; else echo -e "${RED}Invalid domain!${NC}"; fi
     done
     
-    echo -e "${YELLOW}Checking DNS...${NC}"
     check_dns "$DOMAIN"
 
     while true; do
@@ -178,19 +162,11 @@ install_mirza() {
         if validate_admin_id "$ADMIN_ID"; then break; else echo -e "${RED}Invalid Admin ID!${NC}"; fi
     done
 
-    while true; do
-        read -p "Bot Username (without @): " BOT_USERNAME
-        if validate_username "$BOT_USERNAME"; then break; else echo -e "${RED}Invalid username!${NC}"; fi
-    done
+    read -p "Bot Username (without @): " BOT_USERNAME
 
-    # NEW: Ask for Marzban version
     echo -e "\n${YELLOW}Marzban Version Configuration:${NC}"
     read -p "Are you using Marzban Panel v1.0.0 or higher? (y/N): " IS_NEW_MARZBAN
-    if [[ "$IS_NEW_MARZBAN" =~ ^([yY][eE][sS]|[yY])$ ]]; then
-        MARZBAN_VAL="true"
-    else
-        MARZBAN_VAL="false"
-    fi
+    if [[ "$IS_NEW_MARZBAN" =~ ^([yY][eE][sS]|[yY])$ ]]; then MARZBAN_VAL="true"; else MARZBAN_VAL="false"; fi
 
     read -p "Database Name (Enter = mirzapro): " DB_NAME; DB_NAME=${DB_NAME:-mirzapro}
     read -p "Database User (Enter = mirza_user): " DB_USER; DB_USER=${DB_USER:-mirza_user}
@@ -203,12 +179,12 @@ install_mirza() {
     fi
 
     mirza_logo
-    echo -e "${YELLOW}+----------------------------------------------------+${NC}"
-    echo -e "${WHITE}| Domain:       $DOMAIN${NC}"
-    echo -e "${WHITE}| Token:        ${BOT_TOKEN:0:15}...${NC}"
-    echo -e "${WHITE}| Admin ID:     $ADMIN_ID${NC}"
-    echo -e "${WHITE}| New Marzban:  $MARZBAN_VAL${NC}"
-    echo -e "${YELLOW}+----------------------------------------------------+${NC}\n"
+    echo -e "${YELLOW}┌────────────────────────────────────────────────────┐${NC}"
+    echo -e "${WHITE}│ Domain:       $DOMAIN${NC}"
+    echo -e "${WHITE}│ Token:        ${BOT_TOKEN:0:15}...${NC}"
+    echo -e "${WHITE}│ Admin ID:     $ADMIN_ID${NC}"
+    echo -e "${WHITE}│ New Marzban:  $MARZBAN_VAL${NC}"
+    echo -e "${YELLOW}└────────────────────────────────────────────────────┘${NC}\n"
     read -p "Is everything correct? (y/N): " confirm
     [[ "$confirm" != "y" && "$confirm" != "Y" ]] && return 1
 
@@ -218,14 +194,14 @@ install_mirza() {
     wait_for_apt
     echo -e "${YELLOW}Installing packages...${NC}"
     apt-get install -y apache2 mariadb-server git curl ufw phpmyadmin certbot python3-certbot-apache \
-        php8.2 libapache2-mod-php8.2 php8.2-{mysql,curl,mbstring,xml,zip,gd,bcmath} 2>/dev/null
+        php8.2 libapache2-mod-php8.2 php8.2-{mysql,curl,mbstring,xml,zip,gd,bcmath} php8.2-zip 2>/dev/null
 
     ufw allow 22/tcp >/dev/null 2>&1
     ufw allow 'Apache Full' >/dev/null 2>&1
     ufw --force enable >/dev/null 2>&1
     a2enmod rewrite ssl headers >/dev/null 2>&1
 
-    mysql -e "CREATE DATABASE IF NOT EXISTS \`$DB_NAME\`;"
+    mysql -e "CREATE DATABASE IF NOT EXISTS \`$DB_NAME\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
     mysql -e "CREATE USER IF NOT EXISTS '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASS';"
     mysql -e "GRANT ALL PRIVILEGES ON \`$DB_NAME\`.* TO '$DB_USER'@'localhost';"
     mysql -e "FLUSH PRIVILEGES;"
@@ -235,7 +211,6 @@ install_mirza() {
     chown -R www-data:www-data "$MIRZA_PATH"
     chmod -R 755 "$MIRZA_PATH"
 
-    # Create config.php with New Marzban Variable
     cat > "$CONFIG_FILE" <<EOF
 <?php
 if(!defined("index")) define("index", true);
@@ -282,110 +257,106 @@ EOF
     curl -s "https://api.telegram.org/bot$BOT_TOKEN/setWebhook?url=https://$DOMAIN/index.php" >/dev/null
     systemctl restart apache2
 
-    echo -e "${GREEN}Installation completed! Settings saved to /root/mirza_pass.txt${NC}"
+    echo -e "${GREEN}Installation completed! DB Password saved to /root/mirza_pass.txt${NC}"
+    log_message "Installation completed"
 }
 
-# ===================== Delete Mirza =====================
-delete_mirza() {
+# ===================== Telegram Auto Backup Setup =====================
+setup_telegram_backup() {
     mirza_logo
-    echo -e "${RED}⚠️ This will remove ALL data permanently!${NC}\n"
-    read -p "Type 'DELETE' to confirm: " confirm
-    if [[ "$confirm" == "DELETE" ]]; then
-        if [[ -f "$CONFIG_FILE" ]]; then
-            DB_NAME=$(grep -oP "\\\$dbname\s*=\s*'\K[^']+" "$CONFIG_FILE" 2>/dev/null)
-            DB_USER=$(grep -oP "\\\$usernamedb\s*=\s*'\K[^']+" "$CONFIG_FILE" 2>/dev/null)
-            mysql -e "DROP DATABASE IF EXISTS \`$DB_NAME\`; DROP USER IF EXISTS '$DB_USER'@'localhost';" 2>/dev/null
+    echo -e "${CYAN}Searching for Backup PHP file...${NC}"
+    
+    # جستجوی فایل بکاپی که شامل کدهای mysqldump باشد
+    BACKUP_FILE=$(grep -rl "mysqldump" "$MIRZA_PATH" | grep ".php" | head -n 1)
+    
+    if [[ -n "$BACKUP_FILE" ]]; then
+        echo -e "${GREEN}Found Backup File: $BACKUP_FILE${NC}"
+        read -p "Do you want to enable Auto-Backup to Telegram every day at 03:00 AM? (y/N): " cron_confirm
+        if [[ "$cron_confirm" =~ ^([yY][eE][sS]|[yY])$ ]]; then
+            (crontab -l 2>/dev/null; echo "0 3 * * * /usr/bin/php $BACKUP_FILE") | crontab -
+            echo -e "${GREEN}Auto-Backup scheduled successfully! ✅${NC}"
+            log_message "Telegram Auto-Backup enabled for $BACKUP_FILE"
         fi
-        a2dissite mirzapro.conf 2>/dev/null
-        rm -rf "$MIRZA_PATH" /etc/apache2/sites-available/mirzapro.conf
-        systemctl restart apache2
-        echo -e "${GREEN}Deleted successfully.${NC}"
     else
-        echo -e "${YELLOW}Cancelled.${NC}"
+        echo -e "${RED}Backup PHP file not found in $MIRZA_PATH!${NC}"
     fi
 }
 
-# ===================== Update Mirza =====================
+# ===================== Other Menu Functions =====================
+delete_mirza() {
+    mirza_logo
+    read -p "Type 'DELETE' to confirm removal: " confirm
+    if [[ "$confirm" == "DELETE" ]]; then
+        if [[ -f "$CONFIG_FILE" ]]; then
+            DB_NAME=$(grep -oP "\\\$dbname\s*=\s*'\K[^']+" "$CONFIG_FILE")
+            DB_USER=$(grep -oP "\\\$usernamedb\s*=\s*'\K[^']+" "$CONFIG_FILE")
+            mysql -e "DROP DATABASE IF EXISTS \`$DB_NAME\`; DROP USER IF EXISTS '$DB_USER'@'localhost';"
+        fi
+        rm -rf "$MIRZA_PATH" /etc/apache2/sites-available/mirzapro.conf
+        systemctl restart apache2
+        echo -e "${GREEN}Deleted successfully.${NC}"
+    fi
+}
+
 update_mirza() {
     mirza_logo
     if [[ -d "$MIRZA_PATH" ]]; then
-        echo -e "${CYAN}Updating Mirza Pro...${NC}"
         cp "$CONFIG_FILE" /tmp/config.php.backup
         cd "$MIRZA_PATH" && git fetch origin && git reset --hard origin/main
         cp /tmp/config.php.backup "$CONFIG_FILE"
         fix_mirza_errors
         systemctl restart apache2
         echo -e "${GREEN}Updated successfully.${NC}"
-    else
-        echo -e "${RED}Not installed!${NC}"
     fi
 }
 
-# ===================== Backup =====================
 backup_mirza() {
     mirza_logo
     local timestamp=$(date +%Y%m%d_%H%M%S)
-    local backup_name="mirza_backup_$timestamp"
+    local backup_name="mirza_local_$timestamp"
     mkdir -p "$BACKUP_PATH/$backup_name"
-    
-    echo -e "${CYAN}Creating backup...${NC}"
     cp -r "$MIRZA_PATH" "$BACKUP_PATH/$backup_name/files"
-    
     if [[ -f "$CONFIG_FILE" ]]; then
         DB_NAME=$(grep -oP "\\\$dbname\s*=\s*'\K[^']+" "$CONFIG_FILE")
         DB_USER=$(grep -oP "\\\$usernamedb\s*=\s*'\K[^']+" "$CONFIG_FILE")
         DB_PASS=$(grep -oP "\\\$passworddh\s*=\s*'\K[^']+" "$CONFIG_FILE")
         mysqldump -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" > "$BACKUP_PATH/$backup_name/database.sql" 2>/dev/null
     fi
-    
     cd "$BACKUP_PATH" && tar -czf "${backup_name}.tar.gz" "$backup_name" && rm -rf "$backup_name"
-    echo -e "${GREEN}Backup saved at: $BACKUP_PATH/${backup_name}.tar.gz${NC}"
+    echo -e "${GREEN}Local backup created at: $BACKUP_PATH/${backup_name}.tar.gz${NC}"
 }
 
-# ===================== Restore =====================
 restore_backup() {
     mirza_logo
     local backups=($(ls "$BACKUP_PATH"/*.tar.gz 2>/dev/null))
-    if [[ ${#backups[@]} -eq 0 ]]; then echo -e "${RED}No backups found!${NC}"; return 1; fi
-    
-    for i in "${!backups[@]}"; do
-        echo -e "${GREEN}$((i+1)).${NC} $(basename "${backups[$i]}")"
-    done
-    
-    read -p "Select backup number: " choice
+    if [[ ${#backups[@]} -eq 0 ]]; then echo "No backups."; return 1; fi
+    for i in "${!backups[@]}"; do echo -e "${GREEN}$((i+1)).${NC} $(basename "${backups[$i]}")"; done
+    read -p "Select number: " choice
     local selected="${backups[$((choice-1))]}"
-    
-    echo -e "${RED}Overwriting current files...${NC}"
     local temp_dir=$(mktemp -d)
     tar -xzf "$selected" -C "$temp_dir"
-    local b_folder=$(ls "$temp_dir")
-    
-    rm -rf "$MIRZA_PATH"
-    cp -r "$temp_dir/$b_folder/files" "$MIRZA_PATH"
+    local b_name=$(ls "$temp_dir")
+    rm -rf "$MIRZA_PATH" && cp -r "$temp_dir/$b_name/files" "$MIRZA_PATH"
     chown -R www-data:www-data "$MIRZA_PATH"
-    
     rm -rf "$temp_dir"
     systemctl restart apache2
-    echo -e "${GREEN}Files restored successfully!${NC}"
+    echo -e "${GREEN}Files restored.${NC}"
 }
 
-# ===================== View Logs =====================
 view_logs() {
     mirza_logo
-    echo -e "1. Apache Error Log\n2. Apache Access Log\n3. Manager Log\n0. Back"
-    read -p "Choice: " logc
-    case $logc in
+    echo -e "1. Apache Error  2. Apache Access  3. Manager Log"
+    read -p "Choice: " lc
+    case $lc in
         1) tail -n 50 /var/log/apache2/mirza_error.log ;;
         2) tail -n 50 /var/log/apache2/mirza_access.log ;;
         3) tail -n 50 "$LOG_FILE" ;;
     esac
 }
 
-# ===================== Live Log Monitor =====================
 live_log_monitor() {
     mirza_logo
-    echo -e "1. Live Apache Error\n2. Live Apache Access\n3. Live Bot Requests\n0. Back"
-    echo -e "${YELLOW}Press Ctrl+C to stop${NC}"
+    echo -e "1. Apache Error  2. Apache Access  3. Bot Requests (Filtered)"
     read -p "Choice: " lmon
     case $lmon in
         1) tail -f /var/log/apache2/mirza_error.log ;;
@@ -394,57 +365,47 @@ live_log_monitor() {
     esac
 }
 
-# ===================== Service Status =====================
 service_status() {
     mirza_logo
     echo -ne "Apache2: "; systemctl is-active --quiet apache2 && echo -e "${GREEN}Running${NC}" || echo -e "${RED}Stopped${NC}"
     echo -ne "MariaDB: "; systemctl is-active --quiet mariadb && echo -e "${GREEN}Running${NC}" || echo -e "${RED}Stopped${NC}"
-    echo -e "\nServer Resources:"
     df -h / | awk 'NR==2{print "Disk: "$3"/"$2" ("$5")"}'
-    free -m | awk 'NR==2{printf "RAM: %s/%sMB (%.0f%%)\n", $3, $2, $3*100/$2}'
+    free -m | awk 'NR==2{printf "RAM: %s/%sMB\n", $3, $2}'
 }
 
-# ===================== Restart Services =====================
 restart_services() {
-    echo -e "${CYAN}Restarting services...${NC}"
     systemctl restart apache2 mariadb
-    echo -e "${GREEN}Done!${NC}"
+    echo -e "${GREEN}Services restarted.${NC}"
 }
 
-# ===================== Change Bot Settings =====================
 change_bot_settings() {
     mirza_logo
-    echo -e "1. Bot Token\n2. Admin ID\n3. New Marzban (true/false)\n0. Back"
+    echo -e "1. Token  2. Admin ID  3. Marzban Version (true/false)"
     read -p "Choice: " cbs
     case $cbs in
-        1) read -p "New Token: " nt; sed -i "s|\$APIKEY\s*=\s*'[^']*'|\$APIKEY = '$nt'|" "$CONFIG_FILE" ;;
-        2) read -p "New Admin: " na; sed -i "s|\$adminnumber\s*=\s*'[^']*'|\$adminnumber = '$na'|" "$CONFIG_FILE" ;;
-        3) read -p "New Marzban (true/false): " nm; sed -i "s|\$new_marzban\s*=\s*[^;]*;|\$new_marzban = $nm;|" "$CONFIG_FILE" ;;
+        1) read -p "Token: " nt; sed -i "s|\$APIKEY\s*=\s*'[^']*'|\$APIKEY = '$nt'|" "$CONFIG_FILE" ;;
+        2) read -p "Admin: " na; sed -i "s|\$adminnumber\s*=\s*'[^']*'|\$adminnumber = '$na'|" "$CONFIG_FILE" ;;
+        3) read -p "New Marzban: " nm; sed -i "s|\$new_marzban\s*=\s*[^;]*;|\$new_marzban = $nm;|" "$CONFIG_FILE" ;;
     esac
     systemctl restart apache2
 }
 
-# ===================== Webhook Status =====================
 webhook_status() {
     mirza_logo
-    if [[ -f "$CONFIG_FILE" ]]; then
-        TOKEN=$(grep -oE "[0-9]+:[A-Za-z0-9_-]{35,}" "$CONFIG_FILE" 2>/dev/null)
-        curl -s "https://api.telegram.org/bot$TOKEN/getWebhookInfo" | python3 -m json.tool 2>/dev/null || curl -s "https://api.telegram.org/bot$TOKEN/getWebhookInfo"
-    else
-        echo -e "${RED}Config file not found!${NC}"
-    fi
+    TOKEN=$(grep -oE "[0-9]+:[A-Za-z0-9_-]{35,}" "$CONFIG_FILE" 2>/dev/null)
+    curl -s "https://api.telegram.org/bot$TOKEN/getWebhookInfo" | python3 -m json.tool 2>/dev/null || curl -s "https://api.telegram.org/bot$TOKEN/getWebhookInfo"
 }
 
 # ===================== Main Menu =====================
 main_menu() {
     while true; do
         mirza_logo
-        echo -e "${YELLOW}       Mirza Pro Manager - Full Edition${NC}\n"
+        echo -e "${YELLOW}       Mirza Pro Manager - Ultimate Edition${NC}\n"
         echo -e "${GREEN}╔══════════════════════════════════════════════════╗${NC}"
         echo -e "${WHITE}║  1.  Install Mirza Pro                           ║${NC}"
         echo -e "${WHITE}║  2.  Delete Mirza Pro                            ║${NC}"
         echo -e "${WHITE}║  3.  Update Mirza Pro                            ║${NC}"
-        echo -e "${WHITE}║  4.  Backup Mirza Pro                            ║${NC}"
+        echo -e "${WHITE}║  4.  Local Backup (Files + DB)                   ║${NC}"
         echo -e "${WHITE}║  5.  Restore Backup                              ║${NC}"
         echo -e "${WHITE}║  6.  View Logs                                   ║${NC}"
         echo -e "${WHITE}║  7.  Live Log Monitor                            ║${NC}"
@@ -452,25 +413,18 @@ main_menu() {
         echo -e "${WHITE}║  9.  Restart Services                            ║${NC}"
         echo -e "${WHITE}║  10. Change Bot Settings                         ║${NC}"
         echo -e "${WHITE}║  11. Webhook Status                              ║${NC}"
-        echo -e "${WHITE}║  12. Edit config.php                             ║${NC}"
+        echo -e "${WHITE}║  12. Setup Telegram Auto-Backup 🤖               ║${NC}"
+        echo -e "${WHITE}║  13. Edit config.php                             ║${NC}"
         echo -e "${RED}║  0.  Exit                                        ║${NC}"
         echo -e "${GREEN}╚══════════════════════════════════════════════════╝${NC}\n"
-        read -p "Choose an option (0-12): " choice
+        read -p "Choose an option (0-13): " choice
         case $choice in
-            1) install_mirza ;;
-            2) delete_mirza ;;
-            3) update_mirza ;;
-            4) backup_mirza ;;
-            5) restore_backup ;;
-            6) view_logs ;;
-            7) live_log_monitor ;;
-            8) service_status ;;
-            9) restart_services ;;
-            10) change_bot_settings ;;
-            11) webhook_status ;;
-            12) [[ -f "$CONFIG_FILE" ]] && nano "$CONFIG_FILE" && systemctl restart apache2 ;;
+            1) install_mirza ;; 2) delete_mirza ;; 3) update_mirza ;; 4) backup_mirza ;;
+            5) restore_backup ;; 6) view_logs ;; 7) live_log_monitor ;; 8) service_status ;;
+            9) restart_services ;; 10) change_bot_settings ;; 11) webhook_status ;;
+            12) setup_telegram_backup ;;
+            13) [[ -f "$CONFIG_FILE" ]] && nano "$CONFIG_FILE" && systemctl restart apache2 ;;
             0) exit 0 ;;
-            *) echo -e "${RED}Invalid choice!${NC}"; sleep 1 ;;
         esac
         read -p "Press Enter to return to menu..." dummy
     done
