@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================
-# Mirza Pro Manager - Version 3.4.0
+# Mirza Pro Manager - Version 3.4.1
 # =============================================
 
 # ===================== Global Variables =====================
@@ -34,7 +34,7 @@ mirza_logo() {
 ██║╚██╔╝██║██║██╔══██╗ ███╔╝  ██╔══██║    ██╔═══╝ ██╔══██╗██║   ██║
 ██║ ╚═╝ ██║██║██║  ██║███████╗██║  ██║    ██║     ██║  ██║╚██████╔╝
 ╚═╝     ╚═╝╚═╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝    ╚═╝     ╚═╝  ╚═╝ ╚═════╝
-                    Version 3.4.0 - Simplified
+                    Version 3.4.1 - Ultimate
 EOF
     echo -e "${NC}"
 }
@@ -42,7 +42,7 @@ EOF
 # ===================== Wait for APT =====================
 wait_for_apt() {
     while fuser /var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock /var/cache/apt/archives/lock >/dev/null 2>&1; do
-        echo -e "${YELLOW}Waiting for apt locks to be released...${NC}"
+        echo -e "${YELLOW}Waiting for apt locks...${NC}"
         sleep 10
     done
 }
@@ -202,44 +202,50 @@ EOF
     echo -e "${GREEN}Installation completed! Source: $REPO_NAME${NC}"
 }
 
-# ===================== Telegram Auto Backup Setup =====================
+# ===================== Telegram Auto Backup Setup (Dynamic Interval) =====================
 setup_telegram_backup() {
     mirza_logo
     echo -e "${CYAN}Checking for Backup PHP file...${NC}"
     BACKUP_FILE=$(grep -rl "mysqldump" "$MIRZA_PATH" | grep ".php" | head -n 1)
+    
     if [[ -n "$BACKUP_FILE" ]]; then
-        read -p "Enable Auto-Backup to Telegram at 03:00 AM? (y/N): " cron_confirm
+        echo -e "${GREEN}Found: $BACKUP_FILE${NC}"
+        read -p "Enable Auto-Backup to Telegram? (y/N): " cron_confirm
         if [[ "$cron_confirm" =~ ^([yY][eE][sS]|[yY])$ ]]; then
-            (crontab -l 2>/dev/null; echo "0 3 * * * /usr/bin/php $BACKUP_FILE") | crontab -
-            echo -e "${GREEN}Scheduled! ✅${NC}"
+            echo -e "\n${YELLOW}How often should the backup be sent?${NC}"
+            echo -e "Examples: 6 (every 6 hours), 12 (every 12 hours), 24 (once a day)"
+            read -p "Enter interval in hours (1-24): " b_interval
+            
+            if [[ "$b_interval" =~ ^[0-9]+$ ]] && [ "$b_interval" -ge 1 ] && [ "$b_interval" -le 24 ]; then
+                if [ "$b_interval" -eq 24 ]; then
+                    CRON_TIME="0 0 * * *"
+                else
+                    CRON_TIME="0 */$b_interval * * *"
+                fi
+                (crontab -l 2>/dev/null | grep -v "$BACKUP_FILE"; echo "$CRON_TIME /usr/bin/php $BACKUP_FILE") | crontab -
+                echo -e "${GREEN}Auto-Backup scheduled every $b_interval hour(s) successfully! ✅${NC}"
+            else
+                echo -e "${RED}Invalid interval! Using default (24 hours).${NC}"
+                (crontab -l 2>/dev/null | grep -v "$BACKUP_FILE"; echo "0 0 * * * /usr/bin/php $BACKUP_FILE") | crontab -
+            fi
         fi
     else
         echo -e "${RED}Backup PHP file not found!${NC}"
     fi
 }
 
-# ===================== Simplified Log Viewer =====================
+# ===================== Standard Functions =====================
 view_logs() {
     mirza_logo
-    echo -e "${YELLOW}=== Most Important Logs ===${NC}\n"
-    echo -e "${CYAN}1. Critical PHP & Apache Errors (Last 30 lines)${NC}"
-    echo -e "${CYAN}2. Installer Manager Log (Action history)${NC}"
-    echo -e "0. Back to menu\n"
-    read -p "Select choice: " log_c
+    echo -e "1. Apache Errors  2. Manager History  0. Back"
+    read -p "Choice: " log_c
     case $log_c in
-        1)
-            echo -e "\n${RED}--- Apache/PHP Error Log ---${NC}"
-            tail -n 30 /var/log/apache2/mirza_error.log 2>/dev/null || tail -n 30 /var/log/apache2/error.log
-            ;;
-        2)
-            echo -e "\n${GREEN}--- Manager History ---${NC}"
-            tail -n 30 "$LOG_FILE"
-            ;;
+        1) tail -n 30 /var/log/apache2/mirza_error.log 2>/dev/null || tail -n 30 /var/log/apache2/error.log ;;
+        2) tail -n 30 "$LOG_FILE" ;;
         *) return 0 ;;
     esac
 }
 
-# ===================== Standard Functions =====================
 delete_mirza() {
     mirza_logo
     read -p "Type 'DELETE' to confirm: " confirm
@@ -295,30 +301,28 @@ webhook_status() {
 main_menu() {
     while true; do
         mirza_logo
-        echo -e "${YELLOW}       Mirza Pro Manager - Version 3.4.0${NC}\n"
+        echo -e "${YELLOW}       Mirza Pro Manager - Version 3.4.1${NC}\n"
         echo -e "${GREEN}╔══════════════════════════════════════════════════╗${NC}"
         echo -e "${WHITE}║  1.  Install Mirza Pro (2 Sources)               ║${NC}"
         echo -e "${WHITE}║  2.  Delete Mirza Pro                            ║${NC}"
         echo -e "${WHITE}║  3.  Update Mirza Pro                            ║${NC}"
         echo -e "${WHITE}║  4.  Local Backup                                ║${NC}"
-        echo -e "${WHITE}║  5.  Restore Backup (Files Only)                 ║${NC}"
-        echo -e "${WHITE}║  6.  View Logs (Simplified)                      ║${NC}"
+        echo -e "${WHITE}║  5.  Restore Backup (Manual)                     ║${NC}"
+        echo -e "${WHITE}║  6.  View Logs                                   ║${NC}"
         echo -e "${WHITE}║  7.  Service Status                              ║${NC}"
         echo -e "${WHITE}║  8.  Restart Services                            ║${NC}"
-        echo -e "${WHITE}║  9.  Change Bot Settings (new_marzban etc.)      ║${NC}"
+        echo -e "${WHITE}║  9.  Edit config.php                             ║${NC}"
         echo -e "${WHITE}║  10. Webhook Status                              ║${NC}"
         echo -e "${WHITE}║  11. Setup Telegram Auto-Backup 🤖               ║${NC}"
-        echo -e "${WHITE}║  12. Edit config.php                             ║${NC}"
         echo -e "${RED}║  0.  Exit                                        ║${NC}"
         echo -e "${GREEN}╚══════════════════════════════════════════════════╝${NC}\n"
         read -p "Choose: " choice
         case $choice in
             1) install_mirza ;; 2) delete_mirza ;; 3) update_mirza ;; 4) backup_mirza ;;
-            5) read -p "Check $BACKUP_PATH. Press Enter..." dummy ;; 
-            6) view_logs ;; 7) service_status ;;
-            8) restart_services ;; 
-            9) nano "$CONFIG_FILE" ;; 10) webhook_status ;;
-            11) setup_telegram_backup ;; 12) nano "$CONFIG_FILE" ;;
+            5) read -p "Check $BACKUP_PATH. Press Enter..." dummy ;; 6) view_logs ;; 
+            7) service_status ;; 8) restart_services ;; 
+            9) nano "$CONFIG_FILE" && systemctl restart apache2 ;; 10) webhook_status ;;
+            11) setup_telegram_backup ;; 
             0) exit 0 ;;
         esac
         read -p "Press Enter to return..." dummy
