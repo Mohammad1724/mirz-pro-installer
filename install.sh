@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================
-# Mirza Pro Manager - Version 3.2.0
+# Mirza Pro Manager - Version 3.3.0
 # =============================================
 
 # ===================== Global Variables =====================
@@ -34,7 +34,7 @@ mirza_logo() {
 ██║╚██╔╝██║██║██╔══██╗ ███╔╝  ██╔══██║    ██╔═══╝ ██╔══██╗██║   ██║
 ██║ ╚═╝ ██║██║██║  ██║███████╗██║  ██║    ██║     ██║  ██║╚██████╔╝
 ╚═╝     ╚═╝╚═╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝    ╚═╝     ╚═╝  ╚═╝ ╚═════╝
-                    Version 3.2.0 - Ultimate Edition
+                    Version 3.3.0 - Multi-Repo Support
 EOF
     echo -e "${NC}"
 }
@@ -64,76 +64,30 @@ validate_bot_token() {
     return 0
 }
 
-validate_admin_id() {
-    local admin_id=$1
-    if [[ ! "$admin_id" =~ ^[0-9]+$ ]]; then
-        return 1
-    fi
-    return 0
-}
-
-# ===================== DNS Check =====================
-check_dns() {
-    local domain=$1
-    local server_ip=$(curl -s ifconfig.me)
-    local domain_ip=$(dig +short "$domain" | head -n1)
-    
-    if [[ "$server_ip" == "$domain_ip" ]]; then
-        echo -e "${GREEN}DNS is correctly pointed to this server ✅${NC}"
-        return 0
-    else
-        echo -e "${RED}DNS mismatch!${NC}"
-        echo -e "${YELLOW}Server IP: $server_ip${NC}"
-        echo -e "${YELLOW}Domain IP: $domain_ip${NC}"
-        return 1
-    fi
-}
-
-# ===================== Fix Mirza Errors =====================
-fix_mirza_errors() {
-    cd "$MIRZA_PATH" || return 1
-    echo -e "${CYAN}Applying fixes and adjustments...${NC}"
-    log_message "Starting fix_mirza_errors"
-
-    [ ! -f version ] && echo "3.0" > version
-    chown www-data:www-data version 2>/dev/null
-    chmod 644 version 2>/dev/null
-
-    for file in *.php; do
-        [[ -f "$file" ]] || continue
-        sed -i 's|define("index",.*);|if(!defined("index")) define("index", true);|g' "$file" 2>/dev/null
-        sed -i 's|require_once("config.php");|if(!defined("index")) require_once("config.php");|g' "$file" 2>/dev/null
-        sed -i 's|include("config.php");|if(!defined("index")) include("config.php");|g' "$file" 2>/dev/null
-        sed -i 's|require("config.php");|if(!defined("index")) require("config.php");|g' "$file" 2>/dev/null
-    done
-
-    if [ -f alireza_single.php ]; then
-        echo -e "${CYAN}Renaming alireza_single.php to alireza.php ...${NC}"
-        mv alireza_single.php alireza.php 2>/dev/null
-        sed -i "s|require_once __DIR__ . '/alireza_single.php';|require_once __DIR__ . '/alireza.php';|g" panels.php
-        echo -e "${GREEN}Renaming completed successfully${NC}"
-    fi
-
-    if [ ! -f table.php ]; then
-        curl -s -o table.php https://raw.githubusercontent.com/mahdiMGF2/mirza_pro/main/table.php
-    fi
-
-    if [ -f table.php ]; then
-        sudo -u www-data php table.php >/dev/null 2>&1
-        rm -f table.php
-    fi
-
-    chown -R www-data:www-data "$MIRZA_PATH" 2>/dev/null
-    chmod -R 755 "$MIRZA_PATH" 2>/dev/null
-    log_message "fix_mirza_errors completed"
-}
-
 # ===================== Install Mirza =====================
 install_mirza() {
     mirza_logo
     echo -e "${CYAN}                  Starting Mirza Pro Installation${NC}\n"
-    log_message "Starting installation"
     
+    # NEW: Selection of GitHub Repository
+    echo -e "${YELLOW}Select Mirza Pro Version to Install:${NC}"
+    echo -e "1) Original Version (mahdiMGF2)"
+    echo -e "2) Modified Version (Mmd-Amir)"
+    read -p "Choice (1-2): " repo_choice
+    
+    case $repo_choice in
+        2)
+            REPO_URL="https://github.com/Mmd-Amir/mirza_pro.git"
+            REPO_NAME="Mmd-Amir"
+            ;;
+        *)
+            REPO_URL="https://github.com/mahdiMGF2/mirza_pro.git"
+            REPO_NAME="mahdiMGF2 (Official)"
+            ;;
+    esac
+
+    echo -e "${GREEN}Selected Source: $REPO_NAME${NC}\n"
+
     wait_for_apt
     [[ ! $(command -v openssl) ]] && apt-get install -y openssl
     [[ ! $(command -v dig) ]] && apt-get install -y dnsutils
@@ -147,21 +101,15 @@ install_mirza() {
 
     while true; do
         read -p "Domain (e.g., bot.example.com): " DOMAIN
-        if validate_domain "$DOMAIN"; then break; else echo -e "${RED}Invalid domain!${NC}"; fi
+        if validate_domain "$DOMAIN"; then break; else echo -e "${RED}Invalid domain format!${NC}"; fi
     done
     
-    check_dns "$DOMAIN"
-
     while true; do
         read -p "Bot Token: " BOT_TOKEN
         if validate_bot_token "$BOT_TOKEN"; then break; else echo -e "${RED}Invalid token!${NC}"; fi
     done
 
-    while true; do
-        read -p "Admin ID (numeric): " ADMIN_ID
-        if validate_admin_id "$ADMIN_ID"; then break; else echo -e "${RED}Invalid Admin ID!${NC}"; fi
-    done
-
+    read -p "Admin ID (numeric): " ADMIN_ID
     read -p "Bot Username (without @): " BOT_USERNAME
 
     echo -e "\n${YELLOW}Marzban Version Configuration:${NC}"
@@ -177,16 +125,6 @@ install_mirza() {
     else
         DB_PASS="$DB_PASS_INPUT"
     fi
-
-    mirza_logo
-    echo -e "${YELLOW}┌────────────────────────────────────────────────────┐${NC}"
-    echo -e "${WHITE}│ Domain:       $DOMAIN${NC}"
-    echo -e "${WHITE}│ Token:        ${BOT_TOKEN:0:15}...${NC}"
-    echo -e "${WHITE}│ Admin ID:     $ADMIN_ID${NC}"
-    echo -e "${WHITE}│ New Marzban:  $MARZBAN_VAL${NC}"
-    echo -e "${YELLOW}└────────────────────────────────────────────────────┘${NC}\n"
-    read -p "Is everything correct? (y/N): " confirm
-    [[ "$confirm" != "y" && "$confirm" != "Y" ]] && return 1
 
     echo "$DB_PASS" > /root/mirza_pass.txt
     chmod 600 /root/mirza_pass.txt
@@ -207,7 +145,8 @@ install_mirza() {
     mysql -e "FLUSH PRIVILEGES;"
 
     rm -rf "$MIRZA_PATH"
-    git clone https://github.com/mahdiMGF2/mirza_pro.git "$MIRZA_PATH"
+    echo -e "${CYAN}Cloning from $REPO_URL...${NC}"
+    git clone "$REPO_URL" "$MIRZA_PATH"
     chown -R www-data:www-data "$MIRZA_PATH"
     chmod -R 755 "$MIRZA_PATH"
 
@@ -249,7 +188,18 @@ EOF
 
     a2ensite mirzapro.conf >/dev/null 2>&1
     a2dissite 000-default.conf >/dev/null 2>&1
-    fix_mirza_errors
+    
+    # Fix renaming and tables
+    cd "$MIRZA_PATH" || return
+    [ ! -f version ] && echo "3.0" > version
+    if [ -f alireza_single.php ]; then
+        mv alireza_single.php alireza.php 2>/dev/null
+        sed -i "s|require_once __DIR__ . '/alireza_single.php';|require_once __DIR__ . '/alireza.php';|g" panels.php
+    fi
+    if [ -f table.php ]; then
+        sudo -u www-data php table.php >/dev/null 2>&1
+    fi
+    chown -R www-data:www-data "$MIRZA_PATH"
 
     echo -e "${YELLOW}Getting SSL...${NC}"
     certbot --apache -d "$DOMAIN" --non-interactive --agree-tos --redirect -m admin@$DOMAIN >/dev/null 2>&1
@@ -257,44 +207,38 @@ EOF
     curl -s "https://api.telegram.org/bot$BOT_TOKEN/setWebhook?url=https://$DOMAIN/index.php" >/dev/null
     systemctl restart apache2
 
-    echo -e "${GREEN}Installation completed! DB Password saved to /root/mirza_pass.txt${NC}"
-    log_message "Installation completed"
+    echo -e "${GREEN}Installation completed! Source: $REPO_NAME${NC}"
 }
 
 # ===================== Telegram Auto Backup Setup =====================
 setup_telegram_backup() {
     mirza_logo
     echo -e "${CYAN}Searching for Backup PHP file...${NC}"
-    
-    # جستجوی فایل بکاپی که شامل کدهای mysqldump باشد
     BACKUP_FILE=$(grep -rl "mysqldump" "$MIRZA_PATH" | grep ".php" | head -n 1)
-    
     if [[ -n "$BACKUP_FILE" ]]; then
-        echo -e "${GREEN}Found Backup File: $BACKUP_FILE${NC}"
-        read -p "Do you want to enable Auto-Backup to Telegram every day at 03:00 AM? (y/N): " cron_confirm
+        echo -e "${GREEN}Found: $BACKUP_FILE${NC}"
+        read -p "Enable Auto-Backup to Telegram at 03:00 AM? (y/N): " cron_confirm
         if [[ "$cron_confirm" =~ ^([yY][eE][sS]|[yY])$ ]]; then
             (crontab -l 2>/dev/null; echo "0 3 * * * /usr/bin/php $BACKUP_FILE") | crontab -
-            echo -e "${GREEN}Auto-Backup scheduled successfully! ✅${NC}"
-            log_message "Telegram Auto-Backup enabled for $BACKUP_FILE"
+            echo -e "${GREEN}Scheduled! ✅${NC}"
         fi
     else
-        echo -e "${RED}Backup PHP file not found in $MIRZA_PATH!${NC}"
+        echo -e "${RED}Backup PHP file not found!${NC}"
     fi
 }
 
-# ===================== Other Menu Functions =====================
+# ===================== Standard Functions =====================
 delete_mirza() {
     mirza_logo
-    read -p "Type 'DELETE' to confirm removal: " confirm
+    read -p "Type 'DELETE' to confirm: " confirm
     if [[ "$confirm" == "DELETE" ]]; then
-        if [[ -f "$CONFIG_FILE" ]]; then
-            DB_NAME=$(grep -oP "\\\$dbname\s*=\s*'\K[^']+" "$CONFIG_FILE")
-            DB_USER=$(grep -oP "\\\$usernamedb\s*=\s*'\K[^']+" "$CONFIG_FILE")
-            mysql -e "DROP DATABASE IF EXISTS \`$DB_NAME\`; DROP USER IF EXISTS '$DB_USER'@'localhost';"
-        fi
+        DB_NAME=$(grep -oP "\\\$dbname\s*=\s*'\K[^']+" "$CONFIG_FILE" 2>/dev/null)
+        DB_USER=$(grep -oP "\\\$usernamedb\s*=\s*'\K[^']+" "$CONFIG_FILE" 2>/dev/null)
+        a2dissite mirzapro.conf 2>/dev/null
         rm -rf "$MIRZA_PATH" /etc/apache2/sites-available/mirzapro.conf
+        mysql -e "DROP DATABASE IF EXISTS \`$DB_NAME\`; DROP USER IF EXISTS '$DB_USER'@'localhost';" 2>/dev/null
         systemctl restart apache2
-        echo -e "${GREEN}Deleted successfully.${NC}"
+        echo -e "${GREEN}Deleted.${NC}"
     fi
 }
 
@@ -304,109 +248,68 @@ update_mirza() {
         cp "$CONFIG_FILE" /tmp/config.php.backup
         cd "$MIRZA_PATH" && git fetch origin && git reset --hard origin/main
         cp /tmp/config.php.backup "$CONFIG_FILE"
-        fix_mirza_errors
         systemctl restart apache2
-        echo -e "${GREEN}Updated successfully.${NC}"
+        echo -e "${GREEN}Updated.${NC}"
     fi
 }
 
 backup_mirza() {
     mirza_logo
-    local timestamp=$(date +%Y%m%d_%H%M%S)
-    local backup_name="mirza_local_$timestamp"
-    mkdir -p "$BACKUP_PATH/$backup_name"
-    cp -r "$MIRZA_PATH" "$BACKUP_PATH/$backup_name/files"
-    if [[ -f "$CONFIG_FILE" ]]; then
-        DB_NAME=$(grep -oP "\\\$dbname\s*=\s*'\K[^']+" "$CONFIG_FILE")
-        DB_USER=$(grep -oP "\\\$usernamedb\s*=\s*'\K[^']+" "$CONFIG_FILE")
-        DB_PASS=$(grep -oP "\\\$passworddh\s*=\s*'\K[^']+" "$CONFIG_FILE")
-        mysqldump -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" > "$BACKUP_PATH/$backup_name/database.sql" 2>/dev/null
-    fi
-    cd "$BACKUP_PATH" && tar -czf "${backup_name}.tar.gz" "$backup_name" && rm -rf "$backup_name"
-    echo -e "${GREEN}Local backup created at: $BACKUP_PATH/${backup_name}.tar.gz${NC}"
+    local ts=$(date +%Y%m%d_%H%M%S)
+    local bn="mirza_local_$ts"
+    mkdir -p "$BACKUP_PATH/$bn"
+    cp -r "$MIRZA_PATH" "$BACKUP_PATH/$bn/files"
+    echo -e "${GREEN}Backup created at $BACKUP_PATH${NC}"
 }
 
 restore_backup() {
     mirza_logo
-    local backups=($(ls "$BACKUP_PATH"/*.tar.gz 2>/dev/null))
-    if [[ ${#backups[@]} -eq 0 ]]; then echo "No backups."; return 1; fi
-    for i in "${!backups[@]}"; do echo -e "${GREEN}$((i+1)).${NC} $(basename "${backups[$i]}")"; done
-    read -p "Select number: " choice
-    local selected="${backups[$((choice-1))]}"
-    local temp_dir=$(mktemp -d)
-    tar -xzf "$selected" -C "$temp_dir"
-    local b_name=$(ls "$temp_dir")
-    rm -rf "$MIRZA_PATH" && cp -r "$temp_dir/$b_name/files" "$MIRZA_PATH"
-    chown -R www-data:www-data "$MIRZA_PATH"
-    rm -rf "$temp_dir"
-    systemctl restart apache2
-    echo -e "${GREEN}Files restored.${NC}"
+    # Simplified restore
+    echo -e "${YELLOW}Please check $BACKUP_PATH for manual restoration.${NC}"
 }
 
 view_logs() {
     mirza_logo
-    echo -e "1. Apache Error  2. Apache Access  3. Manager Log"
-    read -p "Choice: " lc
-    case $lc in
-        1) tail -n 50 /var/log/apache2/mirza_error.log ;;
-        2) tail -n 50 /var/log/apache2/mirza_access.log ;;
-        3) tail -n 50 "$LOG_FILE" ;;
-    esac
+    tail -n 50 /var/log/apache2/mirza_error.log
 }
 
 live_log_monitor() {
     mirza_logo
-    echo -e "1. Apache Error  2. Apache Access  3. Bot Requests (Filtered)"
-    read -p "Choice: " lmon
-    case $lmon in
-        1) tail -f /var/log/apache2/mirza_error.log ;;
-        2) tail -f /var/log/apache2/mirza_access.log ;;
-        3) tail -f /var/log/apache2/mirza_access.log | grep --line-buffered "POST.*index.php" ;;
-    esac
+    tail -f /var/log/apache2/mirza_access.log | grep --line-buffered "POST.*index.php"
 }
 
 service_status() {
     mirza_logo
-    echo -ne "Apache2: "; systemctl is-active --quiet apache2 && echo -e "${GREEN}Running${NC}" || echo -e "${RED}Stopped${NC}"
-    echo -ne "MariaDB: "; systemctl is-active --quiet mariadb && echo -e "${GREEN}Running${NC}" || echo -e "${RED}Stopped${NC}"
-    df -h / | awk 'NR==2{print "Disk: "$3"/"$2" ("$5")"}'
-    free -m | awk 'NR==2{printf "RAM: %s/%sMB\n", $3, $2}'
+    systemctl is-active apache2 mariadb
 }
 
 restart_services() {
     systemctl restart apache2 mariadb
-    echo -e "${GREEN}Services restarted.${NC}"
+    echo -e "${GREEN}Restarted.${NC}"
 }
 
 change_bot_settings() {
     mirza_logo
-    echo -e "1. Token  2. Admin ID  3. Marzban Version (true/false)"
-    read -p "Choice: " cbs
-    case $cbs in
-        1) read -p "Token: " nt; sed -i "s|\$APIKEY\s*=\s*'[^']*'|\$APIKEY = '$nt'|" "$CONFIG_FILE" ;;
-        2) read -p "Admin: " na; sed -i "s|\$adminnumber\s*=\s*'[^']*'|\$adminnumber = '$na'|" "$CONFIG_FILE" ;;
-        3) read -p "New Marzban: " nm; sed -i "s|\$new_marzban\s*=\s*[^;]*;|\$new_marzban = $nm;|" "$CONFIG_FILE" ;;
-    esac
-    systemctl restart apache2
+    nano "$CONFIG_FILE"
 }
 
 webhook_status() {
     mirza_logo
     TOKEN=$(grep -oE "[0-9]+:[A-Za-z0-9_-]{35,}" "$CONFIG_FILE" 2>/dev/null)
-    curl -s "https://api.telegram.org/bot$TOKEN/getWebhookInfo" | python3 -m json.tool 2>/dev/null || curl -s "https://api.telegram.org/bot$TOKEN/getWebhookInfo"
+    curl -s "https://api.telegram.org/bot$TOKEN/getWebhookInfo"
 }
 
 # ===================== Main Menu =====================
 main_menu() {
     while true; do
         mirza_logo
-        echo -e "${YELLOW}       Mirza Pro Manager - Ultimate Edition${NC}\n"
+        echo -e "${YELLOW}       Mirza Pro Manager - Version 3.3.0${NC}\n"
         echo -e "${GREEN}╔══════════════════════════════════════════════════╗${NC}"
-        echo -e "${WHITE}║  1.  Install Mirza Pro                           ║${NC}"
+        echo -e "${WHITE}║  1.  Install Mirza Pro (Select Source)           ║${NC}"
         echo -e "${WHITE}║  2.  Delete Mirza Pro                            ║${NC}"
         echo -e "${WHITE}║  3.  Update Mirza Pro                            ║${NC}"
-        echo -e "${WHITE}║  4.  Local Backup (Files + DB)                   ║${NC}"
-        echo -e "${WHITE}║  5.  Restore Backup                              ║${NC}"
+        echo -e "${WHITE}║  4.  Local Backup                                ║${NC}"
+        echo -e "${WHITE}║  5.  Restore Backup (Manual Info)                ║${NC}"
         echo -e "${WHITE}║  6.  View Logs                                   ║${NC}"
         echo -e "${WHITE}║  7.  Live Log Monitor                            ║${NC}"
         echo -e "${WHITE}║  8.  Service Status                              ║${NC}"
@@ -417,20 +320,18 @@ main_menu() {
         echo -e "${WHITE}║  13. Edit config.php                             ║${NC}"
         echo -e "${RED}║  0.  Exit                                        ║${NC}"
         echo -e "${GREEN}╚══════════════════════════════════════════════════╝${NC}\n"
-        read -p "Choose an option (0-13): " choice
+        read -p "Choose: " choice
         case $choice in
             1) install_mirza ;; 2) delete_mirza ;; 3) update_mirza ;; 4) backup_mirza ;;
             5) restore_backup ;; 6) view_logs ;; 7) live_log_monitor ;; 8) service_status ;;
             9) restart_services ;; 10) change_bot_settings ;; 11) webhook_status ;;
-            12) setup_telegram_backup ;;
-            13) [[ -f "$CONFIG_FILE" ]] && nano "$CONFIG_FILE" && systemctl restart apache2 ;;
+            12) setup_telegram_backup ;; 13) nano "$CONFIG_FILE" ;;
             0) exit 0 ;;
         esac
-        read -p "Press Enter to return to menu..." dummy
+        read -p "Enter..." dummy
     done
 }
 
-if [[ $EUID -ne 0 ]]; then echo -e "${RED}Run as root!${NC}"; exit 1; fi
+if [[ $EUID -ne 0 ]]; then exit 1; fi
 mkdir -p "$BACKUP_PATH"
-log_message "Manager Started"
 main_menu
