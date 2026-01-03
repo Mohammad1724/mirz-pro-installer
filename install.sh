@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================
-# Mirza Pro Manager - Version 3.3.0
+# Mirza Pro Manager - Version 3.4.0
 # =============================================
 
 # ===================== Global Variables =====================
@@ -34,7 +34,7 @@ mirza_logo() {
 ██║╚██╔╝██║██║██╔══██╗ ███╔╝  ██╔══██║    ██╔═══╝ ██╔══██╗██║   ██║
 ██║ ╚═╝ ██║██║██║  ██║███████╗██║  ██║    ██║     ██║  ██║╚██████╔╝
 ╚═╝     ╚═╝╚═╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝    ╚═╝     ╚═╝  ╚═╝ ╚═════╝
-                    Version 3.3.0 - Multi-Repo Support
+                    Version 3.4.0 - Simplified
 EOF
     echo -e "${NC}"
 }
@@ -42,7 +42,7 @@ EOF
 # ===================== Wait for APT =====================
 wait_for_apt() {
     while fuser /var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock /var/cache/apt/archives/lock >/dev/null 2>&1; do
-        echo -e "${YELLOW}Waiting for apt locks to be released... (10 seconds)${NC}"
+        echo -e "${YELLOW}Waiting for apt locks to be released...${NC}"
         sleep 10
     done
 }
@@ -69,7 +69,6 @@ install_mirza() {
     mirza_logo
     echo -e "${CYAN}                  Starting Mirza Pro Installation${NC}\n"
     
-    # NEW: Selection of GitHub Repository
     echo -e "${YELLOW}Select Mirza Pro Version to Install:${NC}"
     echo -e "1) Original Version (mahdiMGF2)"
     echo -e "2) Modified Version (Mmd-Amir)"
@@ -85,8 +84,6 @@ install_mirza() {
             REPO_NAME="mahdiMGF2 (Official)"
             ;;
     esac
-
-    echo -e "${GREEN}Selected Source: $REPO_NAME${NC}\n"
 
     wait_for_apt
     [[ ! $(command -v openssl) ]] && apt-get install -y openssl
@@ -145,7 +142,6 @@ install_mirza() {
     mysql -e "FLUSH PRIVILEGES;"
 
     rm -rf "$MIRZA_PATH"
-    echo -e "${CYAN}Cloning from $REPO_URL...${NC}"
     git clone "$REPO_URL" "$MIRZA_PATH"
     chown -R www-data:www-data "$MIRZA_PATH"
     chmod -R 755 "$MIRZA_PATH"
@@ -189,7 +185,6 @@ EOF
     a2ensite mirzapro.conf >/dev/null 2>&1
     a2dissite 000-default.conf >/dev/null 2>&1
     
-    # Fix renaming and tables
     cd "$MIRZA_PATH" || return
     [ ! -f version ] && echo "3.0" > version
     if [ -f alireza_single.php ]; then
@@ -201,22 +196,18 @@ EOF
     fi
     chown -R www-data:www-data "$MIRZA_PATH"
 
-    echo -e "${YELLOW}Getting SSL...${NC}"
     certbot --apache -d "$DOMAIN" --non-interactive --agree-tos --redirect -m admin@$DOMAIN >/dev/null 2>&1
-    
     curl -s "https://api.telegram.org/bot$BOT_TOKEN/setWebhook?url=https://$DOMAIN/index.php" >/dev/null
     systemctl restart apache2
-
     echo -e "${GREEN}Installation completed! Source: $REPO_NAME${NC}"
 }
 
 # ===================== Telegram Auto Backup Setup =====================
 setup_telegram_backup() {
     mirza_logo
-    echo -e "${CYAN}Searching for Backup PHP file...${NC}"
+    echo -e "${CYAN}Checking for Backup PHP file...${NC}"
     BACKUP_FILE=$(grep -rl "mysqldump" "$MIRZA_PATH" | grep ".php" | head -n 1)
     if [[ -n "$BACKUP_FILE" ]]; then
-        echo -e "${GREEN}Found: $BACKUP_FILE${NC}"
         read -p "Enable Auto-Backup to Telegram at 03:00 AM? (y/N): " cron_confirm
         if [[ "$cron_confirm" =~ ^([yY][eE][sS]|[yY])$ ]]; then
             (crontab -l 2>/dev/null; echo "0 3 * * * /usr/bin/php $BACKUP_FILE") | crontab -
@@ -225,6 +216,27 @@ setup_telegram_backup() {
     else
         echo -e "${RED}Backup PHP file not found!${NC}"
     fi
+}
+
+# ===================== Simplified Log Viewer =====================
+view_logs() {
+    mirza_logo
+    echo -e "${YELLOW}=== Most Important Logs ===${NC}\n"
+    echo -e "${CYAN}1. Critical PHP & Apache Errors (Last 30 lines)${NC}"
+    echo -e "${CYAN}2. Installer Manager Log (Action history)${NC}"
+    echo -e "0. Back to menu\n"
+    read -p "Select choice: " log_c
+    case $log_c in
+        1)
+            echo -e "\n${RED}--- Apache/PHP Error Log ---${NC}"
+            tail -n 30 /var/log/apache2/mirza_error.log 2>/dev/null || tail -n 30 /var/log/apache2/error.log
+            ;;
+        2)
+            echo -e "\n${GREEN}--- Manager History ---${NC}"
+            tail -n 30 "$LOG_FILE"
+            ;;
+        *) return 0 ;;
+    esac
 }
 
 # ===================== Standard Functions =====================
@@ -238,7 +250,7 @@ delete_mirza() {
         rm -rf "$MIRZA_PATH" /etc/apache2/sites-available/mirzapro.conf
         mysql -e "DROP DATABASE IF EXISTS \`$DB_NAME\`; DROP USER IF EXISTS '$DB_USER'@'localhost';" 2>/dev/null
         systemctl restart apache2
-        echo -e "${GREEN}Deleted.${NC}"
+        echo -e "${GREEN}Deleted successfully.${NC}"
     fi
 }
 
@@ -249,7 +261,7 @@ update_mirza() {
         cd "$MIRZA_PATH" && git fetch origin && git reset --hard origin/main
         cp /tmp/config.php.backup "$CONFIG_FILE"
         systemctl restart apache2
-        echo -e "${GREEN}Updated.${NC}"
+        echo -e "${GREEN}Updated successfully.${NC}"
     fi
 }
 
@@ -259,38 +271,18 @@ backup_mirza() {
     local bn="mirza_local_$ts"
     mkdir -p "$BACKUP_PATH/$bn"
     cp -r "$MIRZA_PATH" "$BACKUP_PATH/$bn/files"
-    echo -e "${GREEN}Backup created at $BACKUP_PATH${NC}"
-}
-
-restore_backup() {
-    mirza_logo
-    # Simplified restore
-    echo -e "${YELLOW}Please check $BACKUP_PATH for manual restoration.${NC}"
-}
-
-view_logs() {
-    mirza_logo
-    tail -n 50 /var/log/apache2/mirza_error.log
-}
-
-live_log_monitor() {
-    mirza_logo
-    tail -f /var/log/apache2/mirza_access.log | grep --line-buffered "POST.*index.php"
+    echo -e "${GREEN}Local backup created at $BACKUP_PATH${NC}"
 }
 
 service_status() {
     mirza_logo
     systemctl is-active apache2 mariadb
+    free -m | awk 'NR==2{printf "RAM: %s/%sMB\n", $3, $2}'
 }
 
 restart_services() {
     systemctl restart apache2 mariadb
-    echo -e "${GREEN}Restarted.${NC}"
-}
-
-change_bot_settings() {
-    mirza_logo
-    nano "$CONFIG_FILE"
+    echo -e "${GREEN}Restarted services successfully.${NC}"
 }
 
 webhook_status() {
@@ -303,32 +295,33 @@ webhook_status() {
 main_menu() {
     while true; do
         mirza_logo
-        echo -e "${YELLOW}       Mirza Pro Manager - Version 3.3.0${NC}\n"
+        echo -e "${YELLOW}       Mirza Pro Manager - Version 3.4.0${NC}\n"
         echo -e "${GREEN}╔══════════════════════════════════════════════════╗${NC}"
-        echo -e "${WHITE}║  1.  Install Mirza Pro (Select Source)           ║${NC}"
+        echo -e "${WHITE}║  1.  Install Mirza Pro (2 Sources)               ║${NC}"
         echo -e "${WHITE}║  2.  Delete Mirza Pro                            ║${NC}"
         echo -e "${WHITE}║  3.  Update Mirza Pro                            ║${NC}"
         echo -e "${WHITE}║  4.  Local Backup                                ║${NC}"
-        echo -e "${WHITE}║  5.  Restore Backup (Manual Info)                ║${NC}"
-        echo -e "${WHITE}║  6.  View Logs                                   ║${NC}"
-        echo -e "${WHITE}║  7.  Live Log Monitor                            ║${NC}"
-        echo -e "${WHITE}║  8.  Service Status                              ║${NC}"
-        echo -e "${WHITE}║  9.  Restart Services                            ║${NC}"
-        echo -e "${WHITE}║  10. Change Bot Settings                         ║${NC}"
-        echo -e "${WHITE}║  11. Webhook Status                              ║${NC}"
-        echo -e "${WHITE}║  12. Setup Telegram Auto-Backup 🤖               ║${NC}"
-        echo -e "${WHITE}║  13. Edit config.php                             ║${NC}"
+        echo -e "${WHITE}║  5.  Restore Backup (Files Only)                 ║${NC}"
+        echo -e "${WHITE}║  6.  View Logs (Simplified)                      ║${NC}"
+        echo -e "${WHITE}║  7.  Service Status                              ║${NC}"
+        echo -e "${WHITE}║  8.  Restart Services                            ║${NC}"
+        echo -e "${WHITE}║  9.  Change Bot Settings (new_marzban etc.)      ║${NC}"
+        echo -e "${WHITE}║  10. Webhook Status                              ║${NC}"
+        echo -e "${WHITE}║  11. Setup Telegram Auto-Backup 🤖               ║${NC}"
+        echo -e "${WHITE}║  12. Edit config.php                             ║${NC}"
         echo -e "${RED}║  0.  Exit                                        ║${NC}"
         echo -e "${GREEN}╚══════════════════════════════════════════════════╝${NC}\n"
         read -p "Choose: " choice
         case $choice in
             1) install_mirza ;; 2) delete_mirza ;; 3) update_mirza ;; 4) backup_mirza ;;
-            5) restore_backup ;; 6) view_logs ;; 7) live_log_monitor ;; 8) service_status ;;
-            9) restart_services ;; 10) change_bot_settings ;; 11) webhook_status ;;
-            12) setup_telegram_backup ;; 13) nano "$CONFIG_FILE" ;;
+            5) read -p "Check $BACKUP_PATH. Press Enter..." dummy ;; 
+            6) view_logs ;; 7) service_status ;;
+            8) restart_services ;; 
+            9) nano "$CONFIG_FILE" ;; 10) webhook_status ;;
+            11) setup_telegram_backup ;; 12) nano "$CONFIG_FILE" ;;
             0) exit 0 ;;
         esac
-        read -p "Enter..." dummy
+        read -p "Press Enter to return..." dummy
     done
 }
 
